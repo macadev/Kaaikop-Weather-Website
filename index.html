@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Data Charts</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script> <!-- Include Date-fns adapter -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"> <!-- Google Font -->
+    <style>
+        body {
+            margin-left: 5%;
+            margin-right: 5%;
+            background-color: #1e1e1e; /* Dark background color */
+            color: #ffffff; /* Light text color */
+            font-family: 'Roboto', sans-serif; /* Apply the Roboto font */
+        }
+        h1 {
+            color: #ffffff;
+            font-weight: 700;
+        }
+        canvas {
+            background-color: #2e2e2e; /* Darker background for the canvas */
+        }
+        .bottom-of-graph {
+            margin-bottom: 2rem;
+        }
+        .radio-buttons {
+            margin-bottom: 20px;
+        }
+        .radio-buttons input {
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div style="display: flex; flex-direction: row; justify-content: space-between;">
+        <h1>Kaaikop Weather Data</h1>
+        <img src="eagle.png" style="width: 100px; height: 100px"></img>
+    </div>
+    <div class="radio-buttons">
+        <label><input type="radio" name="timeRange" value="2">2 Hours</label>
+        <label><input type="radio" name="timeRange" value="4" checked>4 Hours</label>
+        <label><input type="radio" name="timeRange" value="6">6 Hours</label>
+        <label><input type="radio" name="timeRange" value="8">8 Hours</label>
+        <label><input type="radio" name="timeRange" value="12">12 Hours</label>
+    </div>
+    <canvas id="windSpeedChart"></canvas>
+    <canvas id="windDirections" class="bottom-of-graph"></canvas>    
+    <canvas id="temperatureChart" class="bottom-of-graph"></canvas>
+    <canvas id="batteryChart" class="bottom-of-graph"></canvas>
+
+    <script>
+        // Define the wind directions
+        var windDirections = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+        var arrowRotations = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+
+        let windSpeedChart, temperatureChart, batteryChart;
+
+        function fetchData(lastXHours) {
+            // There's 15 data points per hour.
+            // A data point every 4 minutes => 60 / 4 = 15
+            fetch(`https://api.thingspeak.com/channels/2407602/feeds.json?api_key=TTFG3DFXK7VQDWUB&results=${lastXHours * 15}`)
+                .then(response => response.json())
+                .then(data => {
+                    // Extract the necessary data
+                    var times = data.feeds.map(function(item) { 
+                        return (new Date(item.created_at));
+                    });
+                    var maxWindSpeeds = data.feeds.map(function(item) { return parseFloat(item.field1); });
+                    var minWindSpeeds = data.feeds.map(function(item) { return parseFloat(item.field5); });
+                    var avgWindSpeeds = data.feeds.map(function(item) { return parseFloat(item.field6); });
+                    var windDir = data.feeds.map(function(item) { return windDirections[parseInt(item.field2)]; });
+                    var temperatures = data.feeds.map(function(item) { return parseFloat(item.field3); });
+                    var batteryMeasurements = data.feeds.map(function(item) { return parseFloat(item.field4); });
+
+                    if (windSpeedChart) {
+                        windSpeedChart.destroy();
+                    }
+
+                    if (temperatureChart) {
+                        temperatureChart.destroy();
+                    }
+
+                    if (batteryChart) {
+                        batteryChart.destroy();
+                    }
+
+                    // Create the charts
+                    windSpeedChart = createChart('windSpeedChart', 'Wind Speeds', 'Wind Speed (km/h)', times, [{ label: 'Max Wind Speed', data: maxWindSpeeds }, { label: 'Min Wind Speed',  data: minWindSpeeds }, { label: 'Avg Wind Speed', data: avgWindSpeeds}], windDir);
+                    temperatureChart = createChart('temperatureChart', 'Temperatures', 'Temperature (°C)', times, [{ label: 'Temperature', data: temperatures }]);
+                    batteryChart = createChart('batteryChart', 'Battery', 'Battery %', times, [{ label: 'Battery %', data: batteryMeasurements }]);
+                });
+        }
+
+        // Draw arrow
+        function drawArrow(ctx, x, y, width, height, rotationAngle) {
+            ctx.save(); // Save the current transformation matrix
+            // 0 + 8 / 2, 25 + 8 = (4, 33)
+            ctx.translate(x + width / 2, y + height); // Translate to the center of the arrow
+            ctx.rotate(rotationAngle); // Rotate the arrow
+            ctx.translate(-(x + width / 2), -(y + height)); // Translate back
+            ctx.beginPath();
+            // Top of arrow
+            ctx.moveTo(x + width / 2, y);
+            // Left corner of arrow
+            ctx.lineTo(x, y + height);
+            // Left top of tail
+            ctx.lineTo(x + width * 0.45, y + height * 0.7);
+            // Left bottom of tail
+            ctx.lineTo(x + width * 0.45, y + height * 2);
+            // Right Bottom of tail
+            ctx.lineTo(x + width * 0.55, y + height * 2);
+            // Right top of tail
+            ctx.lineTo(x + width * 0.55, y + height * 0.7);
+            // Right corner of arrow
+            ctx.lineTo(x + width, y + height);
+            ctx.closePath();
+            ctx.fillStyle = 'ivory';
+            ctx.fill();
+            ctx.restore(); // Restore the original transformation matrix  
+        }
+
+        // Function to get rotation based on wind direction
+        function getRotation(direction) {
+            var index = windDirections.indexOf(direction);
+            return index * Math.PI / 8 + Math.PI;
+        }
+
+        // Function to create the chart
+        function createChart(canvasId, title, yAxisTitle, times, datasets, windDir) {
+
+            var canvasElement = document.getElementById(canvasId);
+            var windDirectionsCanvas = document.getElementById('windDirections');
+            var ctxWindDirections = document.getElementById('windDirections').getContext('2d');
+
+            // Create a custom plugin to draw the wind direction
+            var windDirectionPlugin = {
+                id: 'windDirectionPlugin',
+                afterDraw: function(chart, args, options) {
+                    if (canvasId != "windSpeedChart") return;
+                    var ctx = ctxWindDirections
+                    var windSpeedCanvasElement = document.getElementById("windSpeedChart");
+
+                    windDirectionsCanvas.width = windSpeedCanvasElement.width / windSpeedChart.currentDevicePixelRatio;
+                    windDirectionsCanvas.height = 50;
+
+                    windDirectionsCanvas.style.width = windSpeedCanvasElement.style.width;
+                    windDirectionsCanvas.style.height = 50;
+
+                    ctx.clearRect(0, 0, windDirectionsCanvas.width, windDirectionsCanvas.height);
+                    
+                    chart.data.labels.forEach(function(label, index) {
+                        var meta = chart.getDatasetMeta(0); // get the meta for the first dataset
+                        var x = meta.data[index].x;
+                        var y = 25; // adjust the y coordinate to be at the bottom of the chart
+
+                        drawArrow(ctx, x, y, 10, 10, getRotation(windDir[index]));
+                    });
+                }
+            };
+
+
+            // Create the chart
+            var ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                plugins: [windDirectionPlugin],
+                type: 'line',
+                data: {
+                    labels: times,
+                    datasets: datasets.map(function(dataset, index) {
+                        return {
+                            label: dataset.label,
+                            data: dataset.data,
+                            borderColor: ['rgb(255, 99, 132)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'][index],
+                            fill: false
+                        };
+                    })
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        x: {
+                            display: true,
+                            type: 'time',
+                            time: {
+                                displayFormats: {
+                                    minute: 'HH:m' // Use lowercase 'd' for day
+                                }
+                            }
+                        },
+                        y: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: yAxisTitle
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add event listeners to radio buttons
+        document.querySelectorAll('input[name="timeRange"]').forEach(function(radio) {
+            radio.addEventListener('change', function() {
+                var timeRange = this.value;
+                fetchData(timeRange);
+            });
+        });
+
+        fetchData(4);
+    </script>
+</body>
+</html>
