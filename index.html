@@ -50,6 +50,11 @@
     <canvas id="batteryChart" class="bottom-of-graph"></canvas>
 
     <script>
+        // To change the colour of the text.
+        if (Chart && Chart.defaults) {
+            Chart.defaults.color = 'ivory';
+        }
+        
         // Define the wind directions
         var windDirections = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
         var arrowRotations = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
