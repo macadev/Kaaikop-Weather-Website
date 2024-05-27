@@ -141,6 +141,8 @@
                     var ctx = ctxWindDirections
                     var windSpeedCanvasElement = document.getElementById("windSpeedChart");
 
+                    if (!windSpeedChart) return;
+
                     windDirectionsCanvas.width = windSpeedCanvasElement.width / windSpeedChart.currentDevicePixelRatio;
                     windDirectionsCanvas.height = 50;
 
