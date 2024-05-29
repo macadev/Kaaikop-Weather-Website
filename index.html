@@ -7,8 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet"> <!-- Google Font -->
     <style>
         body {
-            margin-left: 5%;
-            margin-right: 5%;
+            margin-left: 2.5%;
+            margin-right: 2.5%;
             background-color: #1e1e1e; /* Dark background color */
             color: #ffffff; /* Light text color */
             font-family: 'Roboto', sans-serif; /* Apply the Roboto font */
@@ -50,7 +50,6 @@
     <canvas id="batteryChart" class="bottom-of-graph"></canvas>
 
     <script>
-        // To change the colour of the text.
         if (Chart && Chart.defaults) {
             Chart.defaults.color = 'ivory';
         }
@@ -61,40 +60,146 @@
 
         let windSpeedChart, temperatureChart, batteryChart;
 
-        function fetchData(lastXHours) {
-            // There's 15 data points per hour.
-            // A data point every 4 minutes => 60 / 4 = 15
-            fetch(`https://api.thingspeak.com/channels/2407602/feeds.json?api_key=TTFG3DFXK7VQDWUB&results=${lastXHours * 15}`)
-                .then(response => response.json())
-                .then(data => {
-                    // Extract the necessary data
-                    var times = data.feeds.map(function(item) { 
-                        return (new Date(item.created_at));
-                    });
-                    var maxWindSpeeds = data.feeds.map(function(item) { return parseFloat(item.field1); });
-                    var minWindSpeeds = data.feeds.map(function(item) { return parseFloat(item.field5); });
-                    var avgWindSpeeds = data.feeds.map(function(item) { return parseFloat(item.field6); });
-                    var windDir = data.feeds.map(function(item) { return windDirections[parseInt(item.field2)]; });
-                    var temperatures = data.feeds.map(function(item) { return parseFloat(item.field3); });
-                    var batteryMeasurements = data.feeds.map(function(item) { return parseFloat(item.field4); });
+        let selectedTimeRange = 4;
 
-                    if (windSpeedChart) {
-                        windSpeedChart.destroy();
-                    }
+        function mergeData(weatherData, windDirectionData1, windDirectionData2) {
+            const mergeFeeds = (feed1, feed2) => {
+                // Create a new object that contains all properties from both feeds
+                return { ...feed1, ...feed2 };
+            };
 
-                    if (temperatureChart) {
-                        temperatureChart.destroy();
-                    }
+            const mergeArrays = (arr1, arr2) => {
+                const map = new Map();
 
-                    if (batteryChart) {
-                        batteryChart.destroy();
-                    }
-
-                    // Create the charts
-                    windSpeedChart = createChart('windSpeedChart', 'Wind Speeds', 'Wind Speed (km/h)', times, [{ label: 'Max Wind Speed', data: maxWindSpeeds }, { label: 'Min Wind Speed',  data: minWindSpeeds }, { label: 'Avg Wind Speed', data: avgWindSpeeds}], windDir);
-                    temperatureChart = createChart('temperatureChart', 'Temperatures', 'Temperature (°C)', times, [{ label: 'Temperature', data: temperatures }]);
-                    batteryChart = createChart('batteryChart', 'Battery', 'Battery %', times, [{ label: 'Battery %', data: batteryMeasurements }]);
+                // Add all elements from arr1 to the map
+                arr1.forEach(feed => {
+                    map.set(feed.created_at, { ...feed });
                 });
+
+
+                // Add all elements from arr2 to the map, merging with existing if necessary
+                arr2.forEach(feed => {
+                    if (map.has(feed.created_at)) {
+                        map.set(feed.created_at, mergeFeeds(map.get(feed.created_at), feed));
+                    } else {
+                        map.set(feed.created_at, { ...feed });
+                    }
+                });
+
+                // Convert the map back to an array and sort by created_at
+                return Array.from(map.values()).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+            };
+
+            // Merge windDirectionData1 into weatherData
+            weatherData.feeds = mergeArrays(weatherData.feeds, windDirectionData1.feeds);
+
+
+            // Merge windDirectionData2 into weatherData
+            weatherData.feeds = mergeArrays(weatherData.feeds, windDirectionData2.feeds);
+
+            return weatherData;
+        }
+
+        async function fetchData(lastXHours) {
+            try {
+                // There's 15 data points per hour.
+                // A data point every 4 minutes => 60 / 4 = 15
+                const weatherDataResponse = await fetch(`https://api.thingspeak.com/channels/2407602/feeds.json?api_key=TTFG3DFXK7VQDWUB&results=${lastXHours * 15}`);
+                const weatherData = await weatherDataResponse.json();
+
+                const windDirectionData1Response = await fetch(`https://api.thingspeak.com/channels/2563825/feeds.json?api_key=JT8PSUMM5MRV4RPQ&results=${lastXHours * 15}`);
+                let windDirectionData1 = await windDirectionData1Response.json();
+                windDirectionData1.feeds = windDirectionData1.feeds.map((dirData) => {
+                    return {
+                        created_at: dirData.created_at,
+                        N: dirData.field1,
+                        NNE: dirData.field2,
+                        NE: dirData.field3,
+                        ENE: dirData.field4,
+                        E: dirData.field5,
+                        ESE: dirData.field6,
+                        SE: dirData.field7,
+                        SSE: dirData.field8,
+                    }
+                });
+
+                const windDirectionData2Response = await fetch(`https://api.thingspeak.com/channels/2563827/feeds.json?api_key=C46B02Z995BY4RKO&results=${lastXHours * 15}`);
+                let windDirectionData2 = await windDirectionData2Response.json();
+                windDirectionData2.feeds = windDirectionData2.feeds.map((dirData) => {
+                    return {
+                        created_at: dirData.created_at,
+                        S: dirData.field1,
+                        SSW: dirData.field2,
+                        SW: dirData.field3,
+                        WSW: dirData.field4,
+                        W: dirData.field5,
+                        WNW: dirData.field6,
+                        NW: dirData.field7,
+                        NNW: dirData.field8,
+                    }
+                })
+
+                const mergedData = mergeData(weatherData, windDirectionData1, windDirectionData2);
+
+                // Extract the necessary data
+                const times = weatherData.feeds.map(item => new Date(item.created_at));
+                const maxWindSpeeds = weatherData.feeds.map(item => parseFloat(item.field1));
+                const minWindSpeeds = weatherData.feeds.map(item => parseFloat(item.field5));
+                const avgWindSpeeds = weatherData.feeds.map(item => parseFloat(item.field6));
+                const windDir = weatherData.feeds.map(item => windDirections[parseInt(item.field2)]);
+                const temperatures = weatherData.feeds.map(item => parseFloat(item.field3));
+                const batteryMeasurements = weatherData.feeds.map(item => parseFloat(item.field4));
+                const windDirectionCounts = weatherData.feeds.map(item => {
+                    return {
+                        N: item.N,
+                        NNE: item.NNE,
+                        NE: item.NE,
+                        ENE: item.ENE,
+                        E: item.E,
+                        ESE: item.ESE,
+                        SE: item.SE,
+                        SSE: item.SSE,
+                        S: item.S,
+                        SSW: item.SSW,
+                        SW: item.SW,
+                        WSW: item.WSW,
+                        W: item.W,
+                        WNW: item.WNW,
+                        NW: item.NW,
+                        NNW: item.NNW,
+                    }
+                })
+
+                if (windSpeedChart) {
+                    windSpeedChart.destroy();
+                }
+
+                if (temperatureChart) {
+                    temperatureChart.destroy();
+                }
+
+                if (batteryChart) {
+                    batteryChart.destroy();
+                }
+
+                // Create the charts
+                windSpeedChart = createChart('windSpeedChart', 'Wind Speeds', 'Wind Speed (km/h)', times, [
+                    { label: 'Max Wind Speed', data: maxWindSpeeds },
+                    { label: 'Min Wind Speed', data: minWindSpeeds },
+                    { label: 'Avg Wind Speed', data: avgWindSpeeds }
+                ], windDir, windDirectionCounts);
+                
+                temperatureChart = createChart('temperatureChart', 'Temperatures', 'Temperature (°C)', times, [
+                    { label: 'Temperature', data: temperatures }
+                ]);
+                
+                batteryChart = createChart('batteryChart', 'Battery', 'Battery %', times, [
+                    { label: 'Battery %', data: batteryMeasurements }
+                ]);
+
+            } catch (error) {
+                console.error('Error fetching data:', error);
+            }
         }
 
         // Draw arrow
@@ -132,7 +237,7 @@
         }
 
         // Function to create the chart
-        function createChart(canvasId, title, yAxisTitle, times, datasets, windDir) {
+        function createChart(canvasId, title, yAxisTitle, times, datasets, windDir, windDirectionCounts) {
 
             var canvasElement = document.getElementById(canvasId);
             var windDirectionsCanvas = document.getElementById('windDirections');
@@ -148,11 +253,11 @@
 
                     if (!windSpeedChart) return;
 
-                    windDirectionsCanvas.width = windSpeedCanvasElement.width / windSpeedChart.currentDevicePixelRatio;
-                    windDirectionsCanvas.height = 50;
+                    windDirectionsCanvas.width = windSpeedCanvasElement.width / (windSpeedChart.currentDevicePixelRatio);
+                    windDirectionsCanvas.height = 160;
 
                     windDirectionsCanvas.style.width = windSpeedCanvasElement.style.width;
-                    windDirectionsCanvas.style.height = 50;
+                    windDirectionsCanvas.style.height = 170;
 
                     ctx.clearRect(0, 0, windDirectionsCanvas.width, windDirectionsCanvas.height);
                     
@@ -160,8 +265,57 @@
                         var meta = chart.getDatasetMeta(0); // get the meta for the first dataset
                         var x = meta.data[index].x;
                         var y = 25; // adjust the y coordinate to be at the bottom of the chart
+                        
+                        const windDirCountsArray = [
+                            { dir: 'N', count: parseInt(windDirectionCounts[index].N) },
+                            { dir: 'NNE', count: parseInt(windDirectionCounts[index].NNE) },
+                            { dir: 'NE', count: parseInt(windDirectionCounts[index].NE) },
+                            { dir: 'ENE', count: parseInt(windDirectionCounts[index].ENE) },
+                            { dir: 'E', count: parseInt(windDirectionCounts[index].E) },
+                            { dir: 'ESE', count: parseInt(windDirectionCounts[index].ESE) },
+                            { dir: 'SE', count: parseInt(windDirectionCounts[index].SE) },
+                            { dir: 'SSE', count: parseInt(windDirectionCounts[index].SSE) },
+                            { dir: 'S', count: parseInt(windDirectionCounts[index].S) },
+                            { dir: 'SSW', count: parseInt(windDirectionCounts[index].SSW) },
+                            { dir: 'SW', count: parseInt(windDirectionCounts[index].SW) },
+                            { dir: 'WSW', count: parseInt(windDirectionCounts[index].WSW) },
+                            { dir: 'W', count: parseInt(windDirectionCounts[index].W) },
+                            { dir: 'WNW', count: parseInt(windDirectionCounts[index].WNW) },
+                            { dir: 'NW', count: parseInt(windDirectionCounts[index].NW) },
+                            { dir: 'NNW', count: parseInt(windDirectionCounts[index].NNW) },
+                        ].sort((a, b) => {
+                            if (a.count > b.count) {
+                                return -1;
+                            } else if (a.count < b.count) {
+                                return 1;
+                            }
+                            return 0;
+                        });
 
-                        drawArrow(ctx, x, y, 10, 10, getRotation(windDir[index]));
+                        const maxCount = windDirCountsArray[0].count;
+
+                        drawArrow(ctx, x, y, 10, 10, getRotation(windDirCountsArray[0].dir));
+
+                        let maxFontSize;
+                        if (selectedTimeRange == 2 || selectedTimeRange == 4) {
+                            maxFontSize = 10;
+                        } else if (selectedTimeRange == 6) {
+                            maxFontSize = 8;
+                        } else {
+                            maxFontSize = 6;
+                        }
+
+                        ctx.font = `${maxFontSize}px Roboto`;
+                        ctx.fillStyle = "#FFFFFF";
+                        ctx.fillText(`${Math.floor(maxCount * 100 / 240)}%`, x, 70);
+                        
+                        // Only render the top 3.
+                        [windDirCountsArray[0], windDirCountsArray[1], windDirCountsArray[2]].forEach((windDirCount, index) => {
+                            let fontSize = Math.floor((windDirCount.count / maxCount) * maxFontSize);
+                            ctx.font = `${fontSize}px Roboto`;
+                            ctx.fillStyle = "#FFFFFF";
+                            ctx.fillText(windDirCount.dir, x, 70 + ((index + 1) * 20));
+                        });
                     });
                 }
             };
@@ -186,6 +340,11 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: true,
+                    layout: {
+                        padding: {
+                            right: 20
+                        }
+                    },
                     scales: {
                         x: {
                             display: true,
@@ -211,8 +370,8 @@
         // Add event listeners to radio buttons
         document.querySelectorAll('input[name="timeRange"]').forEach(function(radio) {
             radio.addEventListener('change', function() {
-                var timeRange = this.value;
-                fetchData(timeRange);
+                selectedTimeRange = this.value;
+                fetchData(selectedTimeRange);
             });
         });
 
