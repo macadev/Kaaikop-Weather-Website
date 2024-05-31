@@ -146,6 +146,8 @@
                 const maxWindSpeeds = weatherData.feeds.map(item => parseFloat(item.field1));
                 const minWindSpeeds = weatherData.feeds.map(item => parseFloat(item.field5));
                 const avgWindSpeeds = weatherData.feeds.map(item => parseFloat(item.field6));
+                const p50WindSpeeds = weatherData.feeds.map(item => parseFloat(item.field7));
+                const p90WindSpeeds = weatherData.feeds.map(item => parseFloat(item.field8));
                 const windDir = weatherData.feeds.map(item => windDirections[parseInt(item.field2)]);
                 const temperatures = weatherData.feeds.map(item => parseFloat(item.field3));
                 const batteryMeasurements = weatherData.feeds.map(item => parseFloat(item.field4));
@@ -186,7 +188,9 @@
                 windSpeedChart = createChart('windSpeedChart', 'Wind Speeds', 'Wind Speed (km/h)', times, [
                     { label: 'Max Wind Speed', data: maxWindSpeeds },
                     { label: 'Min Wind Speed', data: minWindSpeeds },
-                    { label: 'Avg Wind Speed', data: avgWindSpeeds }
+                    { label: 'Avg Wind Speed', data: avgWindSpeeds },
+                    { label: 'Median Wind Speed', data: p50WindSpeeds },
+                    { label: 'p90 Wind Speed', data: p90WindSpeeds }
                 ], windDir, windDirectionCounts);
                 
                 temperatureChart = createChart('temperatureChart', 'Temperatures', 'Temperature (°C)', times, [
@@ -332,7 +336,7 @@
                         return {
                             label: dataset.label,
                             data: dataset.data,
-                            borderColor: ['rgb(255, 99, 132)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)'][index],
+                            borderColor: ['rgb(255, 99, 132)', 'rgb(75, 192, 192)', 'rgb(153, 102, 255)', 'rgb(255, 255, 255)', 'rgb(255, 153, 51)'][index],
                             fill: false
                         };
                     })
