@@ -315,14 +315,7 @@
                         
                         // Only render the top 3.
                         [windDirCountsArray[0], windDirCountsArray[1], windDirCountsArray[2]].forEach((windDirCount, index) => {
-                            let fontSize = Math.floor((windDirCount.count / maxCount) * maxFontSize);
-
-                            if (fontSize == 0) {
-                                // Bug in safari makes it so rendering with font-size 0 blows up the font to some other size.   
-                                return;
-                            }
-
-                            ctx.font = `${fontSize}px Roboto`;
+                            ctx.font = `${maxFontSize}px Roboto`;
                             ctx.fillStyle = "#FFFFFF";
                             ctx.fillText(windDirCount.dir, x, 70 + ((index + 1) * 20));
                         });
